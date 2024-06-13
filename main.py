@@ -51,6 +51,7 @@ def main():
     parser.add_argument('--start_action', type=str, action='append', help=f'Action(s) to run before starting. {ACTION_HELP}', default=[])
     parser.add_argument('--complete_action', type=str, action='append', help='Action(s) to run when complete. {ACTION_HELP}', default=[])
     parser.add_argument('--error_action', type=str, action='append', help='Action(s) to run if an error occurs. {ACTION_HELP}', default=[])
+    parser.add_argument('--exclude', type=str, action='append', help='Exclude pattern for directories', default=[])
     args = parser.parse_args()
 
     setup_logging(args.log_file)
@@ -78,7 +79,7 @@ def main():
 
         start_time = time.time()
         metadata = load_metadata(args.dst, args.metadata_file)
-        copier = Copier(metadata, args.src, args.dst)
+        copier = Copier(metadata, args.src, args.dst, args.exclude)
         logger.info('Loaded metadata')
 
         logger.info('Beginning copy...')

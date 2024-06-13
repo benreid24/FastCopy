@@ -19,6 +19,7 @@ class Copier:
     metadata: Metadata
     src: str
     dst: str
+    exclude: list[str]
     copy_count: int
     total_count: int
     copy_size: int
@@ -26,10 +27,11 @@ class Copier:
     lock: Lock
     logger: logging.Logger
 
-    def __init__(self, metadata: Metadata, src: str, dst: str) -> None:
+    def __init__(self, metadata: Metadata, src: str, dst: str, exclude: list[str]) -> None:
         self.metadata = metadata
         self.dst = dst
         self.src = src
+        self.exclude = exclude
         self.copy_count = 0
         self.total_count = 0
         self.copy_size = 0
@@ -44,7 +46,9 @@ class Copier:
         try:
             tasks = []
 
-            for dirpath, _, filenames in os.walk(self.src):
+            for dirpath, dirs, filenames in os.walk(self.src):
+                dirs[:] = [d for d in dirs if d not in self.exclude]
+
                 for filename in filenames:
                     file_path = os.path.join(dirpath, filename)
                     relative_path = os.path.relpath(file_path, self.src)
