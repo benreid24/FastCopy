@@ -8,8 +8,9 @@ from copier import Copier
 from metadata import load_metadata, write_metadata
 from actions import run_action, Variables
 from validation import validate
+from lockfile import acquire_lock, release_lock
 
-ACTION_HELP = 'Format "<action>:<arg>". Action types: [curl:<url>]. Variables (use Python format string): [file_count, copy_count, copy_size, runtime, runtime_ms]'
+ACTION_HELP = 'Format "<action>:<arg>". Action types: [curl:<url>, cmd:<command>]. Variables (use Python format string): [file_count, copy_count, copy_size, runtime, runtime_ms]'
 
 
 def format_bytes(bytes_num: int) -> str:
@@ -57,48 +58,55 @@ def main():
 
     logger.info(f'Copying files from "{args.src}" to "{args.dst}"')
 
-    vars = Variables(file_count=0, copy_count=0, copy_size=0, runtime=0, runtime_ms=0)
-    def run_actions(actions: list[str]):
-        for action in actions:
-            run_action(action, vars)
+    try:
+        if not acquire_lock(args.dst):
+            logger.error('A copy operation is already running')
+            return
 
-    if not validate(args.dst, args.dst_type):
-        run_actions(args.error_action)
+        vars = Variables(file_count=0, copy_count=0, copy_size=0, runtime=0, runtime_ms=0)
+        def run_actions(actions: list[str]):
+            for action in actions:
+                run_action(action, vars)
 
-    logger.info('Validated destination')
-    
-    run_actions(args.start_action)
-    logger.info('Ran startup actions')
+        if not validate(args.dst, args.dst_type):
+            run_actions(args.error_action)
 
-    start_time = time.time()
-    metadata = load_metadata(args.dst, args.metadata_file)
-    copier = Copier(metadata, args.src, args.dst)
-    logger.info('Loaded metadata')
+        logger.info('Validated destination')
+        
+        run_actions(args.start_action)
+        logger.info('Ran startup actions')
 
-    logger.info('Beginning copy...')
-    copier.run()
+        start_time = time.time()
+        metadata = load_metadata(args.dst, args.metadata_file)
+        copier = Copier(metadata, args.src, args.dst)
+        logger.info('Loaded metadata')
 
-    vars.file_count = copier.total_count
-    vars.copy_count = copier.copy_count
-    vars.copy_size = copier.copy_size
-    runtime = time.time() - start_time
-    vars.runtime = int(runtime)
-    vars.runtime_ms = int(runtime * 1000)
+        logger.info('Beginning copy...')
+        copier.run()
 
-    logger.info(
-        'Finished copying:\n\tTotal files: {total}\n\tFiles copied: {copy}\n\tCopy size: {size}\n\tRuntime: {time}'.format(
-            total=vars.file_count,
-            copy=vars.copy_count,
-            size=format_bytes(vars.copy_size),
-            time=format_seconds(vars.runtime)
+        vars.file_count = copier.total_count
+        vars.copy_count = copier.copy_count
+        vars.copy_size = copier.copy_size
+        runtime = time.time() - start_time
+        vars.runtime = int(runtime)
+        vars.runtime_ms = int(runtime * 1000)
+
+        logger.info(
+            'Finished copying:\n\tTotal files: {total}\n\tFiles copied: {copy}\n\tCopy size: {size}\n\tRuntime: {time}'.format(
+                total=vars.file_count,
+                copy=vars.copy_count,
+                size=format_bytes(vars.copy_size),
+                time=format_seconds(vars.runtime)
+            )
         )
-    )
 
-    run_actions(args.complete_action)
-    logger.info('Ran completion actions')
+        run_actions(args.complete_action)
+        logger.info('Ran completion actions')
 
-    write_metadata(args.dst, args.metadata_file, metadata)
-    logger.info('Wrote metadata')
+        write_metadata(args.dst, args.metadata_file, metadata)
+        logger.info('Wrote metadata')
+    finally:
+        release_lock(args.dst)
 
 
 if __name__ == '__main__':

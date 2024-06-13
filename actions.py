@@ -1,6 +1,7 @@
 from typing import Callable
 import logging
 from dataclasses import dataclass
+import subprocess
 
 import requests
 
@@ -16,11 +17,17 @@ ActionHandler = Callable[[str, Variables], None]
 
 
 def handle_curl(url: str, vars: Variables):
-    requests.get(url.format(*vars))
+    requests.get(url.format(**vars.__dict__))
+
+
+def handle_command(cmd: str, vars: Variables):
+    cmd = cmd.format(**vars.__dict__)
+    subprocess.run(cmd, check=True, shell=True)
 
 
 ActionHandlers: dict[str, ActionHandler] = {
-    'curl': handle_curl
+    'curl': handle_curl,
+    'cmd': handle_command,
 }
 
 
